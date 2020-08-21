@@ -405,8 +405,6 @@
     DarkEneryModel = UpperCase(Ini%Read_String_Default('dark_energy_model', 'fluid'))
     write(*,*) 'Dark energy is: ', DarkEneryModel
 
-
-
     if (allocated(P%DarkEnergy)) deallocate(P%DarkEnergy)
     if (DarkEneryModel == 'FLUID') then
         allocate (TDarkEnergyFluid::P%DarkEnergy)
