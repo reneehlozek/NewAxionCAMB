@@ -40,6 +40,24 @@
     procedure :: PerturbationEvolve => TAxionEffectiveFluid_PerturbationEvolve
     end type TAxionEffectiveFluid
 
+    ! RH added new modified DE fluid
+    type, extends(TDarkEnergyModel) :: TModDeltaEffectiveFluid
+        real(dl) :: w_n = 1._dl !Effective equation of state when oscillating
+        real(dl) :: Om = 0._dl !Omega of the early DE component today (assumed to be negligible compared to omega_lambda)
+        real(dl) :: a_c  !transition scale factor
+        real(dl) :: theta_i = const_pi/2 !Initial value
+        real(dl), private :: pow, omL, acpow, freq, n !cached internally
+    contains
+    procedure :: ReadParams =>  TModDeltaEffectiveFluid_ReadParams
+    procedure, nopass :: PythonClass => TModDeltaEffectiveFluid_PythonClass
+    procedure, nopass :: SelfPointer => TModDeltaEffectiveFluid_SelfPointer
+    procedure :: Init => TModDeltaEffectiveFluid_Init
+    procedure :: w_de => TModDeltaEffectiveFluid_w_de
+    procedure :: grho_de => TModDeltaEffectiveFluid_grho_de
+    procedure :: PerturbedStressEnergy => TModDeltaEffectiveFluid_PerturbedStressEnergy
+    procedure :: PerturbationEvolve => TModDeltaEffectiveFluid_PerturbationEvolve
+    end type TModDeltaEffectiveFluid
+
     contains
 
 
@@ -289,5 +307,145 @@
     dgqe = ay(w_ix + 1) * grhov_t
 
     end subroutine TAxionEffectiveFluid_PerturbedStressEnergy
+
+     !!! RH  modified to include the delta
+
+
+    subroutine TModDeltaEffectiveFluid_ReadParams(this, Ini)
+    use IniObjects
+    class(TModDeltaEffectiveFluid) :: this
+    class(TIniFile), intent(in) :: Ini
+
+    call this%TDarkEnergyModel%ReadParams(Ini)
+    this%w_n  = Ini%Read_Double('ModDeltaEffectiveFluid_w_n')
+    this%om  = Ini%Read_Double('ModDeltaEffectiveFluid_om')
+    this%a_c  = Ini%Read_Double('ModDeltaEffectiveFluid_a_c')
+    call Ini%Read('ModDeltaEffectiveFluid_theta_i', this%theta_i)
+
+    end subroutine TModDeltaEffectiveFluid_ReadParams
+
+
+    function TModDeltaEffectiveFluid_PythonClass()
+    character(LEN=:), allocatable :: TModDeltaEffectiveFluid_PythonClass
+
+    TModDeltaEffectiveFluid_PythonClass = 'ModDeltaEffectiveFluid'
+    end function TModDeltaEffectiveFluid_PythonClass
+
+    subroutine TModDeltaEffectiveFluid_SelfPointer(cptr,P)
+    use iso_c_binding
+    Type(c_ptr) :: cptr
+    Type (TModDeltaEffectiveFluid), pointer :: PType
+    class (TPythonInterfacedClass), pointer :: P
+
+    call c_f_pointer(cptr, PType)
+    P => PType
+
+    end subroutine TModDeltaEffectiveFluid_SelfPointer
+
+    subroutine TModDeltaEffectiveFluid_Init(this, State)
+    use classes
+    class(TModDeltaEffectiveFluid), intent(inout) :: this
+    class(TCAMBdata), intent(in) :: State
+    real(dl) :: grho_rad, F, p, mu, xc, n
+
+    select type(State)
+    class is (CAMBdata)
+        this%is_cosmological_constant = this%om==0
+        this%pow = 3*(1+this%w_n)
+        this%omL = State%Omega_de - this%om !Omega_de is total dark energy density today
+        this%acpow = this%a_c**this%pow
+        this%num_perturb_equations = 2
+        if (this%w_n < 0.9999) then
+            ! n <> infinity
+            !get (very) approximate result for sound speed parameter; arXiv:1806.10608  Eq 30 (but mu may not exactly agree with what they used)
+            n = nint((1+this%w_n)/(1-this%w_n))
+            !Assume radiation domination, standard neutrino model; H0 factors cancel
+            grho_rad = (kappa/c**2*4*sigma_boltz/c**3*State%CP%tcmb**4*Mpc**2*(1+3.046*7._dl/8*(4._dl/11)**(4._dl/3)))
+            xc = this%a_c**2/2/sqrt(grho_rad/3)
+            F=7./8
+            p=1./2
+            mu = 1/xc*(1-cos(this%theta_i))**((1-n)/2.)*sqrt((1-F)*(6*p+2)*this%theta_i/n/sin(this%theta_i))
+            this%freq =  mu*(1-cos(this%theta_i))**((n-1)/2.)* &
+                sqrt(const_pi)*Gamma((n+1)/(2.*n))/Gamma(1+0.5/n)*2.**(-(n**2+1)/(2.*n))*3.**((1./n-1)/2)*this%a_c**(-6./(n+1)+3) &
+                *( this%a_c**(6*n/(n+1.))+1)**(0.5*(1./n-1))
+            this%n = n
+        end if
+    end select
+
+    end subroutine TModDeltaEffectiveFluid_Init
+
+
+    function TModDeltaEffectiveFluid_w_de(this, a)
+    class(TModDeltaEffectiveFluid) :: this
+    real(dl) :: TModDeltaEffectiveFluid_w_de
+    real(dl), intent(IN) :: a
+    real(dl) :: rho, apow, acpow
+
+    apow = a**this%pow
+    acpow = this%acpow
+    rho = this%omL+ this%om*(1+acpow)/(apow+acpow)
+    TModDeltaEffectiveFluid_w_de = this%om*(1+acpow)/(apow+acpow)**2*(1+this%w_n)*apow/rho - 1
+
+    end function TModDeltaEffectiveFluid_w_de
+
+    function TModDeltaEffectiveFluid_grho_de(this, a)  !relative density (8 pi G a^4 rho_de /grhov)
+    class(TModDeltaEffectiveFluid) :: this
+    real(dl) :: TModDeltaEffectiveFluid_grho_de, apow
+    real(dl), intent(IN) :: a
+
+    if(a == 0.d0)then
+        TModDeltaEffectiveFluid_grho_de = 0.d0
+    else
+        apow = a**this%pow
+        TModDeltaEffectiveFluid_grho_de = (this%omL*(apow+this%acpow)+this%om*(1+this%acpow))*a**4 &
+            /((apow+this%acpow)*(this%omL+this%om))
+    endif
+
+    end function TModDeltaEffectiveFluid_grho_de
+
+    subroutine TModDeltaEffectiveFluid_PerturbationEvolve(this, ayprime, w, w_ix, &
+        a, adotoa, k, z, y)
+    class(TModDeltaEffectiveFluid), intent(in) :: this
+    real(dl), intent(inout) :: ayprime(:)
+    real(dl), intent(in) :: a, adotoa, w, k, z, y(:)
+    integer, intent(in) :: w_ix
+    real(dl) Hv3_over_k, deriv, apow, acpow, cs2, fac
+
+    if (this%w_n < 0.9999) then
+        fac = 2*a**(2-6*this%w_n)*this%freq**2
+        cs2 = (fac*(this%n-1) + k**2)/(fac*(this%n+1) + k**2)
+    else
+        cs2 = 1
+    end if
+    apow = a**this%pow
+    acpow = this%acpow
+    Hv3_over_k =  3*adotoa* y(w_ix + 1) / k
+    ! dw/dlog a/(1+w)
+    deriv  = (acpow**2*(this%om+this%omL)+this%om*acpow-apow**2*this%omL)*this%pow &
+        /((apow+acpow)*(this%omL*(apow+acpow)+this%om*(1+acpow)))
+    !density perturbation
+    ayprime(w_ix) = -3 * adotoa * (cs2 - w) *  (y(w_ix) + Hv3_over_k) &
+        -   k * y(w_ix + 1) - (1 + w) * k * z  - adotoa*deriv* Hv3_over_k
+    !(1+w)v
+    ayprime(w_ix + 1) = -adotoa * (1 - 3 * cs2 - deriv) * y(w_ix + 1) + &
+        k * cs2 * y(w_ix)
+
+    end subroutine TModDeltaEffectiveFluid_PerturbationEvolve
+
+
+    subroutine TModDeltaEffectiveFluid_PerturbedStressEnergy(this, dgrhoe, dgqe, &
+        dgq, dgrho, grho, grhov_t, w, gpres_noDE, etak, adotoa, k, kf1, ay, ayprime, w_ix)
+    class(TModDeltaEffectiveFluid), intent(inout) :: this
+    real(dl), intent(out) :: dgrhoe, dgqe
+    real(dl), intent(in) ::  dgq, dgrho, grho, grhov_t, w, gpres_noDE, etak, adotoa, k, kf1
+    real(dl), intent(in) :: ay(*)
+    real(dl), intent(inout) :: ayprime(*)
+    integer, intent(in) :: w_ix
+
+    dgrhoe = ay(w_ix) * grhov_t
+    dgqe = ay(w_ix + 1) * grhov_t
+
+    end subroutine TModDeltaEffectiveFluid_PerturbedStressEnergy
+
 
     end module DarkEnergyFluid
