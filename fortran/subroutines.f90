@@ -1,4 +1,31 @@
     !Low-level numerical routines for splines and dverk for differential equation integration.
+    SUBROUTINE cubicsplint(xa,ya,y2a,n,x,y)
+     use Precision
+    INTEGER n
+    real(dl)x,y,xa(n),y2a(n),ya(n)
+    INTEGER k,khi,klo
+    real(dl)a,b,h
+    klo=1
+    khi=n
+1   if (khi-klo.gt.1) then
+        k=(khi+klo)/2
+        if(xa(k).gt.x)then
+            khi=k
+        else
+            klo=k
+        endif
+        goto 1
+    endif
+    h=xa(khi)-xa(klo)
+    if (h.eq.0.) then
+        write(*,*) 'huh'
+        return
+    endif
+    a=(xa(khi)-x)/h
+    b=(x-xa(klo))/h
+    y=a*ya(klo)+b*ya(khi)+&
+    ((a**3-a)*y2a(klo)+(b**3-b)*y2a(khi))*(h**2)/6.d0
+    END SUBROUTINE cubicsplint
 
     subroutine splder(y,dy,n, g)
     use Precision
@@ -135,9 +162,41 @@
     end subroutine spline_integrate
 
 
+    subroutine simple_integrate(x,y,s,n)
+      use Precision
+    implicit none
+
+    integer, intent(in) :: n
+    real(dl), intent(in) :: x(n), y(n)
+    real(dl),dimension(n) :: f,xc
+    real(dl),dimension(n+1) :: xt
+    real(dl), intent(out) :: s(n)
+    real(dl) :: xmax,xmin,dx
+    integer :: i
+    xmin = x(1)
+    xmax = x(n)
+
+    dx = (xmax - xmin)/real(n,dl)
+    xt = (/(xmin + dx*(i-1),i=1,n+1)/)
+    ! Define x at center
+    do i=1,n
+    xc(i) = x(i) + 0.5*dx
+    enddo
+    ! Define f
+    do i=1,n
+    f(i) = xc(i)**2
+    enddo
+    ! Integrate (Midpoint method)
+    s(1) = 0.0
+    do i=2,n
+    s(i) = s(i-1) + f(i)*dx
+    enddo
+
+    end subroutine simple_integrate
+
+
     !ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
     !  this is not the splint given in numerical recipes
-
 
     subroutine splint(y,z,n)
     use Precision
@@ -162,6 +221,99 @@
     z=0.5d0*(y(1)+y(n))+(dy1-dyn)/12._dl
     z= z + sum(y(2:n1))
     end subroutine splint
+
+
+   subroutine alexg_spline (x, y, b, c, d, n)
+!======================================================================
+!  Calculate the coefficients b(i), c(i), and d(i), i=1,2,...,n
+!  for cubic spline interpolation
+!  s(x) = y(i) + b(i)*(x-x(i)) + c(i)*(x-x(i))**2 + d(i)*(x-x(i))**3
+!  for  x(i) <= x <= x(i+1)
+!  Alex G: January 2010
+!----------------------------------------------------------------------
+!  input..
+!  x = the arrays of data abscissas (in strictly increasing order)
+!  y = the arrays of data ordinates
+!  n = size of the arrays xi() and yi() (n>=2)
+!  output..
+!  b, c, d  = arrays of spline coefficients
+!  comments ...
+!  spline.f90 program is based on fortran version of program spline.f
+!  the accompanying function fspline can be used for interpolation
+!======================================================================
+implicit none
+integer n
+double precision x(n), y(n), b(n), c(n), d(n)
+integer i, j, gap
+double precision h
+
+gap = n-1
+! check input
+if ( n < 2 ) return
+if ( n < 3 ) then
+  b(1) = (y(2)-y(1))/(x(2)-x(1))   ! linear interpolation
+  c(1) = 0.
+  d(1) = 0.
+  b(2) = b(1)
+  c(2) = 0.
+  d(2) = 0.
+  return
+end if
+!
+! step 1: preparation
+!
+d(1) = x(2) - x(1)
+c(2) = (y(2) - y(1))/d(1)
+do i = 2, gap
+  d(i) = x(i+1) - x(i)
+  b(i) = 2.0*(d(i-1) + d(i))
+  c(i+1) = (y(i+1) - y(i))/d(i)
+  c(i) = c(i+1) - c(i)
+end do
+!
+! step 2: end conditions 
+!
+b(1) = -d(1)
+b(n) = -d(n-1)
+c(1) = 0.0
+c(n) = 0.0
+if(n /= 3) then
+  c(1) = c(3)/(x(4)-x(2)) - c(2)/(x(3)-x(1))
+  c(n) = c(n-1)/(x(n)-x(n-2)) - c(n-2)/(x(n-1)-x(n-3))
+  c(1) = c(1)*d(1)**2/(x(4)-x(1))
+  c(n) = -c(n)*d(n-1)**2/(x(n)-x(n-3))
+end if
+!
+! step 3: forward elimination 
+!
+do i = 2, n
+  h = d(i-1)/b(i-1)
+  b(i) = b(i) - h*d(i-1)
+  c(i) = c(i) - h*c(i-1)
+end do
+!
+! step 4: back substitution
+!
+c(n) = c(n)/b(n)
+do j = 1, gap
+  i = n-j
+  c(i) = (c(i) - d(i)*c(i+1))/b(i)
+end do
+!
+! step 5: compute spline coefficients
+!
+b(n) = (y(n) - y(gap))/d(gap) + d(gap)*(c(gap) + 2.0*c(n))
+do i = 1, gap
+  b(i) = (y(i+1) - y(i))/d(i) - d(i)*(c(i+1) + 2.0*c(i))
+  d(i) = (c(i+1) - c(i))/d(i)
+  c(i) = 3.*c(i)
+end do
+c(n) = 3.0*c(n)
+d(n) = d(n-1)
+end subroutine alexg_spline
+
+
+
 
 
     !This version is modified to pass an object parameter to the function on each call

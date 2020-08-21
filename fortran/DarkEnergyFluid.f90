@@ -40,6 +40,13 @@
 
     ! RH added new modified DE fluid
     type, extends(TDarkEnergyModel) :: TModDeltaEffectiveFluid
+        integer ::  max_abin=20 ! number of bins allowed
+        real(dl), dimension(20) :: lndeltavals  !Values of the delta bin
+        real(dl), dimension(20) :: lnavals ! values of ln a
+        real(dl), dimension(20) :: lndeltavalssecondderivs ! array of second derivatives for spline
+
+
+        real(dl), dimension(20) :: splcoeff_b, splcoeff_c, splcoeff_d ! spline coefficients
         real(dl) :: w_n = 1._dl !Effective equation of state when oscillating
         real(dl) :: Om = 0._dl !Omega of the early DE component today (assumed to be negligible compared to omega_lambda)
         real(dl) :: a_c  !transition scale factor
@@ -304,10 +311,25 @@
 
     subroutine TModDeltaEffectiveFluid_ReadParams(this, Ini)
     use IniObjects
+    integer i
     class(TModDeltaEffectiveFluid) :: this
     class(TIniFile), intent(in) :: Ini
 
     call this%TDarkEnergyModel%ReadParams(Ini)
+    do i=1,this%max_abin
+       this%lnavals(i) = Ini%Read_Double_Array('ModDeltaEffectiveFluid_lnaval', i)
+       this%lndeltavals(i) = Ini%Read_Double_Array('ModDeltaEffectiveFluid_lndeltaval', i)
+       write(87,*) this%lnavals(i), this%lndeltavals(i)
+    enddo
+
+    ! Spline over ln delta
+    !call spline(this%lnavals,this%lndeltavals, this%max_abin,0,0,this%lndeltavalssecondderivs)
+    call alexg_spline (this%lnavals,this%lndeltavals, this%splcoeff_b, this%splcoeff_c, this%splcoeff_d, this%max_abin)
+
+    do i=1,this%max_abin
+       write(88,*) i, this%lnavals(i), this%lndeltavals(i), this%splcoeff_b(i), this%splcoeff_c(i), this%splcoeff_d(i)
+    enddo
+
     this%w_n  = Ini%Read_Double('ModDeltaEffectiveFluid_w_n')
     this%om  = Ini%Read_Double('ModDeltaEffectiveFluid_om')
     this%a_c  = Ini%Read_Double('ModDeltaEffectiveFluid_a_c')
@@ -335,6 +357,7 @@
 
     subroutine TModDeltaEffectiveFluid_Init(this, State)
     use classes
+
     class(TModDeltaEffectiveFluid), intent(inout) :: this
     class(TCAMBdata), intent(in) :: State
     real(dl) :: grho_rad, F, p, mu, xc, n
@@ -342,6 +365,7 @@
     select type(State)
     class is (CAMBdata)
         this%is_cosmological_constant = this%om==0
+
         this%pow = 3*(1+this%w_n)
         this%omL = State%Omega_de - this%om !Omega_de is total dark energy density today
         this%acpow = this%a_c**this%pow
@@ -370,12 +394,40 @@
     class(TModDeltaEffectiveFluid) :: this
     real(dl) :: TModDeltaEffectiveFluid_w_de
     real(dl), intent(IN) :: a
-    real(dl) :: rho, apow, acpow
+    real(dl) :: rho, apow, acpow, lnaval, dlndeltadlna, dx, splin_lndelta
+    integer i, j,k
+    lnaval = dlog(a)
+
+    ! if u is ouside the x() interval take a boundary value (left or right)
+    if(lnaval <= this%lnavals(1)) then
+       splin_lndelta = this%lndeltavals(1)
+    end if
+    if(lnaval >= this%lnavals(this%max_abin)) then
+       splin_lndelta = this%lndeltavals(this%max_abin)
+    end if
+
+    i = 1
+    j = this%max_abin+1
+    do while (j > i+1)
+       k = (i+j)/2
+       if(lnaval < this%lnavals(k)) then
+          j=k
+       else
+          i=k
+       end if
+    end do
+
+    dx = lnaval-this%lnavals(i)
+    splin_lndelta = this%lndeltavals(i) + dx*(this%splcoeff_b(i) + dx*(this%splcoeff_c(i) + dx*this%splcoeff_d(i)))
 
     apow = a**this%pow
     acpow = this%acpow
     rho = this%omL+ this%om*(1+acpow)/(apow+acpow)
-    TModDeltaEffectiveFluid_w_de = this%om*(1+acpow)/(apow+acpow)**2*(1+this%w_n)*apow/rho - 1
+
+    TModDeltaEffectiveFluid_w_de = -1 - splin_lndelta/3 
+    write(99,*) lnaval, splin_lndelta
+    !this%om*(1+acpow)/(apow+acpow)**2*(1+this%w_n)*apow/rho - 1
+    !TModDeltaEffectiveFluid_w_de = this%om*(1+acpow)/(apow+acpow)**2*(1+this%w_n)*apow/rho - 1
 
     end function TModDeltaEffectiveFluid_w_de
 
