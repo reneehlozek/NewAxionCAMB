@@ -13,6 +13,34 @@
 
     !  8*pi*G*rho*a**4.
     grhoa2 = this%grho_no_de(a) +  grhov_t * a**2
+    real(dl) :: dtauda, rhonu, grhoa2, a2, a4, grhov_t, grhoa, grho_alla2, grho_nodelta
+    integer :: nu_i
+
+    a2 = a ** 2
+    a4=a**4
+    grho_nodelta=this%grhok * a2 + (this%grhoc + this%grhob) * a + this%grhog + this%grhornomass +  this%grhov * a2*a2
+
+    ! previous call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhov, a, grhov_t)
+    call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhok, this%grhoc, this%grhob, this%grhog, this%grhornomass, this%grhov, a, grhov_t, grho_alla2)
+
+    ! previous rho*a**4
+    !    grhoa2 = this%grhok * a2 + (this%grhoc + this%grhob) * a + this%grhog + this%grhornomass +  grhov_t * a2
+
+
+    ! RH added
+    grhoa2=grho_alla2
+
+    ! RH printing out energy densities 
+!    write(77,*) a, grhoa2, grho_nodelta
+
+
+    if (this%CP%Num_Nu_massive /= 0) then
+        !Get massive neutrino density relative to massless
+        do nu_i = 1, this%CP%nu_mass_eigenstates
+            call ThermalNuBack%rho(a * this%nu_masses(nu_i), rhonu)
+            grhoa2 = grhoa2 + rhonu * this%grhormass(nu_i)
+        end do
+    end if
 
     dtauda = sqrt(3 / grhoa2)
 
@@ -2147,7 +2175,7 @@
     real(dl) q,aq,v
     real(dl) G11_t,G30_t, wnu_arr(max_nu)
 
-    real(dl) dgq,grhob_t,grhor_t,grhoc_t,grhog_t,grhov_t,grhonu_t,sigma,polter
+    real(dl) dgq,grhob_t,grhor_t,grhoc_t,grhog_t,grhov_t,grhonu_t,sigma,polter, grho_alla2
     real(dl) w_dark_energy_t !equation of state of dark energy
     real(dl) gpres_noDE !Pressure with matter and radiation, no dark energy
     real(dl) qgdot,qrdot,pigdot,pirdot,vbdot,dgrho,adotoa
@@ -2201,7 +2229,8 @@
         grhov_t = State%grhov * a2
         w_dark_energy_t = -1_dl
     else
-        call State%CP%DarkEnergy%BackgroundDensityAndPressure(State%grhov, a, grhov_t, w_dark_energy_t)
+!        call State%CP%DarkEnergy%BackgroundDensityAndPressure(State%grhov, a, grhov_t, w_dark_energy_t)
+        call State%CP%DarkEnergy%BackgroundDensityAndPressure(State%grhok, State%grhoc, State%grhob, State%grhog, State%grhornomass, State%grhov, a,  grhov_t, grho_alla2, w_dark_energy_t)
     end if
 
     !total perturbations: matter terms first, then add massive nu, de and radiation
@@ -2217,8 +2246,10 @@
         call MassiveNuVars(EV,ay,a,grhonu_t,gpres_nu,dgrho_matter,dgq, wnu_arr)
     end if
 
+! RH check with Pavel here
     grho_matter=grhonu_t+grhob_t+grhoc_t
     grho = grho_matter+grhor_t+grhog_t+grhov_t
+
     gpres_noDE = gpres_nu + (grhor_t + grhog_t)/3
 
     if (State%flat) then
@@ -2813,7 +2844,7 @@
     type(EvolutionVars) EV
     integer n,l
     real(dl), target ::  yv(n),yvprime(n)
-    real(dl) ep,tau,grho,rhopi,cs2,opacity,gpres
+    real(dl) ep,tau,grho,rhopi,cs2,opacity,gpres, grho_alla2
     logical finished_tightcoupling
     real(dl), dimension(:),pointer :: neut,neutprime,E,B,Eprime,Bprime
     real(dl)  grhob_t,grhor_t,grhoc_t,grhog_t,grhov_t,polter
@@ -2858,9 +2889,15 @@
     grhoc_t=State%grhoc/a
     grhor_t=State%grhornomass/a2
     grhog_t=State%grhog/a2
-    call CP%DarkEnergy%BackgroundDensityAndPressure(State%grhov, a, grhov_t, w_dark_energy_t)
+!previous    call CP%DarkEnergy%BackgroundDensityAndPressure(State%grhov, a, grhov_t, w_dark_energy_t)
+    call CP%DarkEnergy%BackgroundDensityAndPressure(State%grhok, State%grhoc, State%grhob, State%grhog, State%grhornomass, State%grhov, a,  grhov_t, grho_alla2, w_dark_energy_t)
 
-    grho=grhob_t+grhoc_t+grhor_t+grhog_t+grhov_t
+
+
+ ! previous   grho=grhob_t+grhoc_t+grhor_t+grhog_t+grhov_t
+    ! RH added below
+    grho = grho_alla2/a2
+
     gpres=(grhog_t+grhor_t)/3._dl+grhov_t*w_dark_energy_t
 
     adotoa=sqrt(grho/3._dl)

@@ -56,7 +56,8 @@
     end Type lSamples
 
     logical, parameter :: dowinlens = .false. !not used, test getting CMB lensing using visibility
-    integer, parameter :: thermal_history_def_timesteps = 20000
+!    integer, parameter :: thermal_history_def_timesteps = 20000 ! original
+    integer, parameter :: thermal_history_def_timesteps = 200  !RH modified renee
 
     Type TThermoData
         logical :: HasThermoData = .false. !Has it been computed yet for current parameters?
@@ -481,7 +482,8 @@
         end if
         call this%CP%DarkEnergy%Init(this)
         if (global_error_flag==0) then
-            this%tau0=this%TimeOfz(0._dl)
+            !this%tau0=this%TimeOfz(0._dl)
+            this%tau0=this%TimeOfz(0._dl, 1d-8)
             this%chi0=this%rofChi(this%tau0/this%curvature_radius)
             this%scale= this%chi0*this%curvature_radius/this%tau0  !e.g. change l sampling depending on approx peak spacing
             if (this%closed .and. this%tau0/this%curvature_radius >3.14) then
@@ -868,13 +870,15 @@
     class(CAMBdata) :: this
     integer, intent(in) :: n
     real(dl), intent(in) :: a_arr(n)
-    real(dl) :: grhov_t, rhonu, grhonu, a
+    real(dl) :: grhov_t, rhonu, grhonu, a, grho_alla2
     real(dl), intent(out) :: densities(8,n)
     integer nu_i,i
 
     do i=1, n
         a = a_arr(i)
-        call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhov, a, grhov_t)
+! previous        call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhov, a, grhov_t)
+        call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhok, this%grhoc, this%grhob, this%grhog, this%grhornomass, this%grhov, a,  grhov_t, grho_alla2)
+
         grhonu = 0
 
         if (this%CP%Num_Nu_massive /= 0) then
@@ -995,10 +999,12 @@
     integer, intent(in) :: n
     real(dl), intent(in) :: a(n)
     real(dl), intent(out) :: grhov_t(n), w(n)
+    real(dl) :: grho_alla2
     integer i
 
     do i=1, n
-        call this%CP%DarkEnergy%BackgroundDensityAndPressure(1._dl, a(i), grhov_t(i), w(i))
+ ! previous       call this%CP%DarkEnergy%BackgroundDensityAndPressure(1._dl, a(i), grhov_t(i), w(i))
+        call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhok, this%grhoc, this%grhob, this%grhog, this%grhornomass,this%grhov, a(i),  grhov_t(i), grho_alla2,w(i))
     end do
     grhov_t = grhov_t/a**2
 
@@ -1645,6 +1651,7 @@
 
     CP => State%CP
 
+    write(*,*) 'inside thermo init in results'
     !Allocate memory outside parallel region to keep ifort happy
     background_boost = CP%Accuracy%BackgroundTimeStepBoost*CP%Accuracy%AccuracyBoost
     if (background_boost > 20) then
@@ -1708,6 +1715,7 @@
     ninverse = nint(background_boost*log(1/a0)/log(1/2d-10)*4000)
     if (.not. CP%DarkEnergy%is_cosmological_constant) ninverse = ninverse*2
 
+    write(*,*) 'inside thermo init inside results before recomb init'
     nlin = ninverse/2
     allocate(scale_factors(ninverse+nlin))
     allocate(times(ninverse+nlin))
@@ -1717,19 +1725,22 @@
     !$OMP PARALLEL SECTIONS DEFAULT(SHARED)
     !$OMP SECTION
     call CP%Recomb%Init(State,WantTSpin=CP%Do21cm)    !almost all the time spent here
+    write(*,*) 'inside thermo init inside results after recomb init'
 
     if (CP%Evolve_delta_xe) this%recombination_saha_tau  = State%TimeOfZ(CP%Recomb%get_saha_z(), tol=1e-4_dl)
+    write(*,*) 'inside thermo init inside results after timeofz 1'
     if (CP%Evolve_baryon_cs .or. CP%Evolve_delta_xe .or. CP%Evolve_delta_Ts .or. CP%Do21cm) &
         this%recombination_Tgas_tau = State%TimeOfz(1/CP%Recomb%min_a_evolve_Tm-1, tol=1e-4_dl)
-
+    write(*,*) 'inside thermo init inside results after timeofz 2'
     !$OMP SECTION
     !Do other stuff while recombination calculating
     awin_lens1=0
     awin_lens2=0
     transfer_ix =0
 
+    write(*,*) 'inside thermo init inside results before splini'
     call splini(spline_data,nthermo)
-
+    write(*,*) 'inside thermo init inside results after splini'
     this%tight_tau = 0
     this%actual_opt_depth = 0
     ncount=0
@@ -1741,7 +1752,9 @@
     this%matter_verydom_tau = 0
     a_verydom = CP%Accuracy%AccuracyBoost*5*(State%grhog+State%grhornomass)/(State%grhoc+State%grhob)
     if (CP%Reion%Reionization) then
-        call CP%Reion%get_timesteps(State%reion_n_steps, reion_z_start, reion_z_complete)
+       write(*,*) 'inside thermo init inside results before get timesteps'
+       call CP%Reion%get_timesteps(State%reion_n_steps, reion_z_start, reion_z_complete)
+       write(*,*) 'inside thermo init inside results after get timesteps'
         State%reion_tau_start = max(0.05_dl, State%TimeOfZ(reion_z_start, 1d-3))
         !Time when a very small reionization fraction (assuming tanh fitting)
         State%reion_tau_complete = min(State%tau0, &
@@ -1771,18 +1784,25 @@
     do i=1, ninverse+nlin
         dt(i) = dtauda(State,scale_factors(i))
     end do
+
+       write(*,*) 'inside thermo init inside results before this%ScaleFactorAtTime%Init 1'
     call this%ScaleFactorAtTime%Init(scale_factors, dt)
     call this%ScaleFactorATTime%IntegralArray(times(2), first_index=2)
+       write(*,*) 'inside thermo init inside results after this%ScaleFactorAtTime%Init 2'
     times(1) = this%tauminn
     times(2:) = times(2:) + 2*(sqrt(1 + om*scale_factors(2)/ State%adotrad) -1)/om
     times(ninverse+nlin) = State%tau0
+       write(*,*) 'inside thermo init inside results before this%ScaleFactorAtTime%Init 3'
     call This%ScaleFactorAtTime%Init(times, scale_factors)
+       write(*,*) 'inside thermo init inside results after this%ScaleFactorAtTime%Init 4'
     taus(1) = this%tauminn
     do i=2,nthermo-1
         taus(i) = this%tauminn*exp((i-1)*this%dlntau)
     end do
     taus(nthermo) = State%tau0
+       write(*,*) 'inside thermo init inside results before this%ScaleFactorAtTime%Init 5'
     call this%ScaleFactorAtTime%Array(taus(2:), this%scaleFactor(2:))
+       write(*,*) 'inside thermo init inside results after this%ScaleFactorAtTime%Init 6'
     this%scaleFactor(1) = a0
     this%scaleFactor(nthermo) = 1
     this%adot(1) = 1/dtauda(State,a0)

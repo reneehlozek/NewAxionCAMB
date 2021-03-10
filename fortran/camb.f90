@@ -64,6 +64,27 @@
     call SetActiveState(OutData)
     OutData%HasScalarTimeSources= DefaultFalse(onlytimesources)
     OutData%OnlyTransfer = DefaultFalse(onlytransfer) .or. OutData%HasScalarTimeSources
+    OutData%OnlyTransfer = DefaultFalse(onlytransfer)
+    if (Params%WantCls .and. Params%WantScalars) then
+        P = Params
+        P%Max_eta_k=max(min(P%max_l,3000)*2.5_dl,P%Max_eta_k)
+        P%WantTensors = .false.
+        P%WantVectors = .false.
+        if ((P%NonLinear==NonLinear_lens .or. P%NonLinear==NonLinear_both) .and. &
+            (P%DoLensing .or. State%num_redshiftwindows > 0)) then
+            P%WantTransfer  = .true.
+        end if
+        call OutData%SetParams(P)
+        write(*,*) 'here after SetParams 1'
+        if (global_error_flag==0) call cmbmain
+        write(*,*) 'here after cmbmain 2'
+        if (global_error_flag/=0) then
+            if (present(error)) error =global_error_flag
+            return
+        end if
+        call_again = .true.
+    end if
+        write(*,*) 'here after cmbmain 3'
 
     !Vector and tensors first, so at end time steps in state are for scalars
     if (Params%WantCls .and. Params%WantTensors) then
@@ -73,7 +94,9 @@
         P%WantScalars = .false.
         P%WantVectors = .false.
         call OutData%SetParams(P, call_again=call_again)
+        write(*,*) 'here after set params 4'
         if (global_error_flag==0) call cmbmain
+        write(*,*) 'here after cmbmain 5'
         if (global_error_flag/=0) then
             if (present(error)) error =global_error_flag
             return
@@ -81,6 +104,7 @@
         call_again = .true.
     end if
 
+        write(*,*) 'here after cmbmain 6'
     if (Params%WantCls .and. Params%WantVectors) then
         P=Params
         P%WantTransfer = .false.
