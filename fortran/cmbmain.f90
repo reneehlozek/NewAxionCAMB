@@ -146,7 +146,9 @@
 
     if (DebugMsgs .and. Feedbacklevel > 0) call Timer%Start(starttime)
 
+    write(*,*) 'here before InitVars in cmbmain 1' 
     call InitVars(State) !Most of single thread time spent here (in InitRECFAST)
+    write(*,*) 'here after InitVars in cmbmain 2' 
     if (global_error_flag/=0) return
 
     if (DebugMsgs .and. Feedbacklevel > 0) then
@@ -722,8 +724,9 @@
     real(dl) taumin, maxq, initAccuracyBoost
     integer itf
 
+    write(*,*) 'setting active state 1'
     call SetActiveState(state)
-
+    write(*,*) 'setting active state 2'
     initAccuracyBoost = CP%Accuracy%AccuracyBoost * CP%Accuracy%TimeStepBoost
 
     ! Maximum and minimum k-values.
@@ -767,7 +770,9 @@
     !     This subroutine also fixes the timesteps where the sources are
     !     saved in order to do the integration. So TimeSteps is set here.
     !These routines in ThermoData (modules.f90)
+    write(*,*) 'setting thermodata 1'
     call State%ThermoData%Init(State,taumin)
+    write(*,*) 'setting thermodata 2'
     if (global_error_flag/=0) return
 
     if (DebugMsgs .and. Feedbacklevel > 0) write (*,*) 'ThermoData.Init'

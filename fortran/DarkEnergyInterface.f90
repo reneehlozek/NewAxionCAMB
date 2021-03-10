@@ -19,6 +19,7 @@
     procedure :: w_de
     procedure :: grho_de
     procedure :: Effective_w_wa !Used as approximate values for non-linear corrections
+    procedure :: TotalDensity ! Renee added this
     end type TDarkEnergyModel
 
     type, extends(TDarkEnergyModel) :: TDarkEnergyEqnOfState
@@ -52,12 +53,13 @@
 
     end function w_de  ! equation of state of the PPF DE
 
-    function grho_de(this, a)  !relative density (8 pi G a^4 rho_de /grhov)
-    class(TDarkEnergyModel) :: this
-    real(dl) :: grho_de, al, fint
-    real(dl), intent(IN) :: a
+    function grho_de(this,grhok, grhoc, grhob, grhog, grhornomass, grhov, a)  !relative density (8 pi G a^4 rho_de /grhov)
+      class(TDarkEnergyModel),intent(inout) :: this
+      real(dl), intent(IN) :: grhok, grhoc, grhob, grhog, grhornomass, grhov, a
 
-    grho_de =0._dl
+      real(dl) :: grho_de, al, fint
+      
+      grho_de =0._dl
 
     end function grho_de
 
@@ -69,33 +71,58 @@
 
 
     subroutine Init(this, State)
-    use classes
-    class(TDarkEnergyModel), intent(inout) :: this
-    class(TCAMBdata), intent(in) :: State
-
+      use classes
+      class(TDarkEnergyModel), intent(inout) :: this
+      class(TCAMBdata), intent(in) :: State
+      
     end subroutine Init
 
-    subroutine BackgroundDensityAndPressure(this, grhov, a, grhov_t, w)
+    subroutine BackgroundDensityAndPressure(this, grhok, grhoc, grhob, grhog, grhornomass, grhov, a,  grhov_t, grho_all, w)
+      !grhov, a, grhov_t, grho_all, w)
+
     !Get grhov_t = 8*pi*rho_de*a**2 and (optionally) equation of state at scale factor a
     class(TDarkEnergyModel), intent(inout) :: this
     real(dl), intent(in) :: grhov, a
-    real(dl), intent(out) :: grhov_t
+    real(dl), intent(in) ::  grhok, grhoc, grhob, grhog, grhornomass
+    real(dl), intent(out) :: grhov_t, grho_all
     real(dl), optional, intent(out) :: w
+
+! grhoa2 = this%grhok * a2 + (this%grhos%grhov, a, grhov_t, grho_alla2)c + this%grhob) * a + this%grhog + this%grhornomass +  grhov_t * a2
 
     if (this%is_cosmological_constant) then
         grhov_t = grhov * a * a
+        
+! grho_all = 8*pi*rho_tot*a**4
+
+        grho_all = grhok*(a**2)  + (grhoc + grhob)*a + (grhog + grhornomass) +  grhov*(a**4)
+
         if (present(w)) w = -1_dl
     else
         ! Ensure a valid result
         if (a > 1e-10) then
-            grhov_t = grhov * this%grho_de(a) / (a * a)
+            grhov_t = grhov * this%grho_de(grhok, grhoc, grhob, grhog, grhornomass, grhov, a) / (a * a)
         else
             grhov_t = 0._dl
         end if
+
+        ! grho_all = 8*pi*rho_tot*a**4 --> but now rho_de varying
+        grho_all = this%TotalDensity(grhok, grhoc, grhob, grhog, grhornomass, grhov, a)
+
         if (present(w)) w = this%w_de(a)
     end if
 
+
     end subroutine BackgroundDensityAndPressure
+
+    function TotalDensity(this, grhok, grhoc, grhob, grhog, grhornomass, grhov, a)
+      class(TDarkEnergyModel), intent(inout) :: this
+      real(dl), intent(IN) :: grhok, grhoc, grhob, grhog, grhornomass, grhov, a
+      real(dl) :: TotalDensity
+         ! 8*pi*G*rho*a**4
+      TotalDensity =  grhok*(a**2)+ (grhoc + grhob)*a + (grhog + grhornomass)+  grhov*(a**4)
+      write(*,*) 'in here - should be moddelta instead'
+    end function TotalDensity
+    
 
     subroutine Effective_w_wa(this, w, wa)
     class(TDarkEnergyModel), intent(inout) :: this
@@ -170,7 +197,7 @@
 
 
     function TDarkEnergyEqnOfState_w_de(this, a)
-    class(TDarkEnergyEqnOfState) :: this
+    class(TDarkEnergyEqnOfState):: this
     real(dl) :: TDarkEnergyEqnOfState_w_de, al
     real(dl), intent(IN) :: a
 
@@ -199,10 +226,11 @@
 
     end subroutine TDarkEnergyEqnOfState_Effective_w_wa
 
-    function TDarkEnergyEqnOfState_grho_de(this, a) result(grho_de) !relative density (8 pi G a^4 rho_de /grhov)
-    class(TDarkEnergyEqnOfState) :: this
+    function TDarkEnergyEqnOfState_grho_de(this,grhok, grhoc, grhob, grhog, grhornomass, grhov, a) result(grho_de) !relative density (8 pi G a^4 rho_de /grhov)
+    class(TDarkEnergyEqnOfState), intent(inout) :: this
     real(dl) :: grho_de, al, fint
-    real(dl), intent(IN) :: a
+    real(dl), intent(IN) :: grhok, grhoc, grhob, grhog, grhornomass, grhov, a
+!    real(dl), intent(IN) :: a
 
     if(.not. this%use_tabulated_w) then
         grho_de = a ** (1._dl - 3. * this%w_lam - 3. * this%wa)

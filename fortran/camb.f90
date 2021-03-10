@@ -61,13 +61,16 @@
             P%WantTransfer  = .true.
         end if
         call OutData%SetParams(P)
+        write(*,*) 'here after SetParams 1'
         if (global_error_flag==0) call cmbmain
+        write(*,*) 'here after cmbmain 2'
         if (global_error_flag/=0) then
             if (present(error)) error =global_error_flag
             return
         end if
         call_again = .true.
     end if
+        write(*,*) 'here after cmbmain 3'
 
     if (Params%WantCls .and. Params%WantTensors) then
         P=Params
@@ -76,7 +79,9 @@
         P%WantScalars = .false.
         P%WantVectors = .false.
         call OutData%SetParams(P, call_again=call_again)
+        write(*,*) 'here after set params 4'
         if (global_error_flag==0) call cmbmain
+        write(*,*) 'here after cmbmain 5'
         if (global_error_flag/=0) then
             if (present(error)) error =global_error_flag
             return
@@ -84,6 +89,7 @@
         call_again = .true.
     end if
 
+        write(*,*) 'here after cmbmain 6'
     if (Params%WantCls .and. Params%WantVectors) then
         P=Params
         P%WantTransfer = .false.
