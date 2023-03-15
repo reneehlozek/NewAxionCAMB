@@ -13,36 +13,13 @@
 
     !  8*pi*G*rho*a**4.
     grhoa2 = this%grho_no_de(a) +  grhov_t * a**2
-    real(dl) :: dtauda, rhonu, grhoa2, a2, a4, grhov_t, grhoa, grho_alla2, grho_nodelta
-    integer :: nu_i
 
-    a2 = a ** 2
-    a4=a**4
-    grho_nodelta=this%grhok * a2 + (this%grhoc + this%grhob) * a + this%grhog + this%grhornomass +  this%grhov * a2*a2
-
-    ! previous call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhov, a, grhov_t)
-    call this%CP%DarkEnergy%BackgroundDensityAndPressure(this%grhok, this%grhoc, this%grhob, this%grhog, this%grhornomass, this%grhov, a, grhov_t, grho_alla2)
-
-    ! previous rho*a**4
-    !    grhoa2 = this%grhok * a2 + (this%grhoc + this%grhob) * a + this%grhog + this%grhornomass +  grhov_t * a2
-
-
-    ! RH added
-    grhoa2=grho_alla2
-
-    ! RH printing out energy densities 
-!    write(77,*) a, grhoa2, grho_nodelta
-
-
-    if (this%CP%Num_Nu_massive /= 0) then
-        !Get massive neutrino density relative to massless
-        do nu_i = 1, this%CP%nu_mass_eigenstates
-            call ThermalNuBack%rho(a * this%nu_masses(nu_i), rhonu)
-            grhoa2 = grhoa2 + rhonu * this%grhormass(nu_i)
-        end do
+    if (grhoa2 <= 0) then
+        call GlobalError('Universe stops expanding before today (recollapse not supported)', error_unsupported_params)
+        dtauda = 0
+    else
+        dtauda = sqrt(3 / grhoa2)
     end if
-
-    dtauda = sqrt(3 / grhoa2)
 
     end function dtauda
 

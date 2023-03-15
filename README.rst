@@ -10,9 +10,9 @@ CAMB
 .. image:: https://img.shields.io/conda/vn/conda-forge/camb.svg
    :target: https://anaconda.org/conda-forge/camb
 .. image:: https://readthedocs.org/projects/camb/badge/?version=latest
-   :target: https://camb.readthedocs.org/en/latest
-.. image:: https://travis-ci.org/cmbant/camb.svg?branch=master
-  :target: https://travis-ci.org/cmbant/camb/builds
+   :target: https://camb.readthedocs.io/en/latest
+.. image:: https://travis-ci.com/cmbant/camb.svg?branch=master
+  :target: https://app.travis-ci.com/cmbant/camb/builds
 .. image:: https://mybinder.org/badge_logo.svg
   :target: https://mybinder.org/v2/gh/cmbant/CAMB/HEAD?filepath=docs%2FCAMBdemo.ipynb
 
@@ -23,7 +23,7 @@ CAMB is a cosmology code for calculating cosmological observables, including
 CMB, lensing, source count and 21cm angular power spectra, matter power spectra, transfer functions
 and background evolution. The code is in Python, with numerical code implemented in fast modern Fortran.
 
-See the `CAMB python example notebook <https://camb.readthedocs.org/en/latest/CAMBdemo.html>`_ for a
+See the `CAMB python example notebook <https://camb.readthedocs.io/en/latest/CAMBdemo.html>`_ for a
 quick introduction to how to use the CAMB Python package.
 
 For a standard non-editable installation use::
@@ -35,19 +35,15 @@ To install from source, clone from github using::
 
     git clone --recursive https://github.com/cmbant/CAMB
 
-Then in the project source root directory use::
+Then install using::
 
-    python setup.py install [--user]
-
-If you want to work on the code, you can also just install in place without copying anything using::
-
-    pip install -e . [--user]
+    pip install -e ./CAMB [--user]
 
 You will need gfortran 6 or higher installed to compile. Binary files for Windows are also provided, so these are used instead if no
 gfortran installation is found on Windows machines. If you have gfortran installed, "python setup.py make"
 (and other standard setup commands) will build the Fortran library on all systems (including Windows without directly using a Makefile).
 
-The python wrapper provides a module called "camb" documented in the `Python CAMB documentation <https://camb.readthedocs.io/en/latest/>`_.
+The python wrapper provides a module called "camb" documented in the Python `CAMB documentation <https://camb.readthedocs.io/en/latest/>`_.
 
 After installation you can also run CAMB from the command line reading parameters from a .ini file, e.g.::
 
@@ -72,9 +68,10 @@ To reproduce legacy results, see these branches:
  - *rayleigh* includes frequency-dependent Rayleigh scattering
  - *python2* is the last Python 2 compatible version
 
-=============
+===================
 
 .. raw:: html
 
-    <a href="http://www.sussex.ac.uk/astronomy/"><img src="https://cdn.cosmologist.info/antony/Sussex.png" height="170px"></a>
-    <a href="http://erc.europa.eu/"><img src="https://erc.europa.eu/sites/default/files/content/erc_banner-vertical.jpg" height="200px"></a>
+    <a href="https://www.sussex.ac.uk/astronomy/"><img src="https://cdn.cosmologist.info/antony/Sussex_white.svg" style="height:200px" height="200px"></a>
+    <a href="https://erc.europa.eu/"><img src="https://cdn.cosmologist.info/antony/ERC_white.svg" style="height:200px" height="200px"></a>
+    <a href="https://stfc.ukri.org/"><img src="https://cdn.cosmologist.info/antony/STFC_white.svg" style="height:200px" height="200px"></a>

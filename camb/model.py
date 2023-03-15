@@ -33,6 +33,11 @@ Transfer_Newt_vel_baryon = 12
 Transfer_vel_baryon_cdm = 13
 Transfer_max = Transfer_vel_baryon_cdm
 
+# for 21cm case
+Transfer_monopole = 4
+Transfer_vnewt = 5
+Transfer_Tmat = 6
+
 NonLinear_none = "NonLinear_none"
 NonLinear_pk = "NonLinear_pk"
 NonLinear_lens = "NonLinear_lens"
@@ -330,7 +335,7 @@ class CAMBparams(F2003Class):
         if effective_ns_for_nonlinear is not None:
             initpower.effective_ns_for_nonlinear = effective_ns_for_nonlinear
         if pk is None:
-            pk = np.asarray([])
+            pk = np.empty(0)
         elif len(k) != len(pk):
             raise CAMBValueError("k and P(k) arrays must be same size")
         if pk_tensor is not None:
@@ -360,8 +365,8 @@ class CAMBparams(F2003Class):
         :param cosmomc_approx: if true, use approximate fitting formula for :math:`z_\star`,
                                if false do full numerical calculation
         :param theta_H0_range: min, max iterval to search for H0 (in km/s/Mpc)
-        :param est_H0: an initial guess for H0 in km/s/Mpc, used in the case comsomc_approx=False.
-        :param iteration_threshold: differnce in H0 from est_H0 for which to iterate, used for cosmomc_approx=False
+        :param est_H0: an initial guess for H0 in km/s/Mpc, used in the case cosmomc_approx=False.
+        :param iteration_threshold: difference in H0 from est_H0 for which to iterate, used for cosmomc_approx=False
         """
 
         if not (0.001 < theta < 0.1):
@@ -399,7 +404,6 @@ class CAMBparams(F2003Class):
                 # iterate with recalculation of recombination and zstar
                 self.set_H0_for_theta(theta, theta_H0_range=theta_H0_range, est_H0=self.H0,
                                       iteration_threshold=iteration_threshold)
-
         except ValueError:
             raise CAMBParamRangeError('No solution for H0 inside of theta_H0_range')
 
@@ -421,7 +425,7 @@ class CAMBparams(F2003Class):
         (cosmomc_theta, which is based on a fitting forumula for simple models, or thetastar, which is numerically
         calculated more generally). Note that you must have already set the dark energy model, you can't use
         set_cosmology with theta and then change the background evolution (which would change theta at the calculated
-        H0 value).Likewise the dark energy model cannot depend explicitly on H0.
+        H0 value). Likewise the dark energy model cannot depend explicitly on H0.
 
         :param H0: Hubble parameter today in km/s/Mpc. Can leave unset and instead set thetastar or cosmomc_theta
                   (which solves for the required H0).
@@ -614,6 +618,9 @@ class CAMBparams(F2003Class):
     def get_zre(self):
         return self.Reion.get_zre(self)
 
+    # alias consistent with input parameter name
+    get_zrei = get_zre
+
     def get_Y_p(self, ombh2=None, delta_neff=None):
         r"""
         Get BBN helium nucleon fraction (NOT the same as the mass fraction Y_He) by intepolation using the
@@ -621,7 +628,7 @@ class CAMBparams(F2003Class):
         (or the default one, if `Y_He` has not been set).
 
         :param ombh2: :math:`\Omega_b h^2` (default: value passed to :meth:`set_cosmology`)
-        :param delta_neff:  additional :math:`N_{\rm eff}` relative to standard value (of 3.046)
+        :param delta_neff:  additional :math:`N_{\rm eff}` relative to standard value (of 3.044)
                            (default: from values passed to :meth:`set_cosmology`)
         :return:  :math:`Y_p^{\rm BBN}` helium nucleon fraction predicted by BBN.
         """
@@ -639,7 +646,7 @@ class CAMBparams(F2003Class):
         (or the default one, if `Y_He` has not been set).
 
         :param ombh2: :math:`\Omega_b h^2` (default: value passed to :meth:`set_cosmology`)
-        :param delta_neff:  additional :math:`N_{\rm eff}` relative to standard value (of 3.046)
+        :param delta_neff:  additional :math:`N_{\rm eff}` relative to standard value (of 3.044)
                            (default: from values passed to :meth:`set_cosmology`)
         :return: BBN helium nucleon fraction D/H
         """
@@ -711,7 +718,7 @@ class CAMBparams(F2003Class):
                 self.NonLinear = NonLinear_none
 
     def set_for_lmax(self, lmax, max_eta_k=None, lens_potential_accuracy=0,
-                     lens_margin=150, k_eta_fac=2.5, lens_k_eta_reference=18000.0):
+                     lens_margin=150, k_eta_fac=2.5, lens_k_eta_reference=18000.0, nonlinear=None):
         r"""
         Set parameters to get CMB power spectra accurate to specific a l_lmax.
         Note this does not fix the actual output L range, spectra may be calculated above l_max
@@ -728,6 +735,8 @@ class CAMBparams(F2003Class):
         :param k_eta_fac:  k_eta_fac default factor for setting max_eta_k = k_eta_fac*lmax if max_eta_k=None
         :param lens_k_eta_reference:  value of max_eta_k to use when lens_potential_accuracy>0; use
                                       k_eta_max = lens_k_eta_reference*lens_potential_accuracy
+        :param nonlinear: use non-linear power spectrum; if None, sets nonlinear if lens_potential_accuracy>0 otherwise
+                          preserves current setting
         :return: self
         """
         if self.DoLensing:
@@ -736,8 +745,10 @@ class CAMBparams(F2003Class):
             self.max_l = lmax
         self.max_eta_k = max_eta_k or self.max_l * k_eta_fac
         if lens_potential_accuracy:
-            self.set_nonlinear_lensing(True)
+            self.set_nonlinear_lensing(nonlinear is not False)
             self.max_eta_k = max(self.max_eta_k, lens_k_eta_reference * lens_potential_accuracy)
+        elif nonlinear is not None:
+            self.set_nonlinear_lensing(nonlinear)
         return self
 
     def scalar_power(self, k):
